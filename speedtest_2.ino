@@ -96,7 +96,7 @@ void printSavedSpeeds(){
   display.clearDisplay();
   display.setTextSize(2); // Draw 2X-scale text
   display.setTextColor(SSD1306_WHITE);
-  display.setCursor(10, 0);
+  display.setCursor(0, 0);
   display.println(incomingSpeed);
   display.println(outgoingSpeed);
 
