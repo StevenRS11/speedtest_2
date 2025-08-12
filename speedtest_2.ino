@@ -3,9 +3,11 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
-#define GATE1_PIN 4  // First photogate digital input pin
-#define GATE2_PIN 5  // Second photogate digital input pin
-#define DISTANCE_INCHES 2.0  // Distance between photogates in inches
+#define GATE1_PIN 5  // First photogate digital input pin
+#define GATE2_PIN 4  // Second photogate digital input pin
+#define GATE3_PIN 6  // Second photogate digital input pin
+
+#define DISTANCE_INCHES 1.25  // Distance between photogates in inches
 #define TIMEOUT_US 1000000  // 1 second timeout in microseconds
 
 #define SDA_PIN 8  // Change this to your preferred SDA pin
@@ -23,20 +25,22 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 volatile unsigned long timeGate1 = 0;
 volatile unsigned long timeGate2 = 0;
+
 volatile bool gate1Triggered = false;
 volatile bool gate2Triggered = false;
+volatile bool gate3Triggered = false;
+
 volatile int lastTriggeredGate = 0;  // 1 = Gate 1 first, 2 = Gate 2 first
-volatile int gate1TriggerCount = 0;
-volatile int gate2TriggerCount = 0;
+
+bool printOutgoing = false;
 
 float incomingSpeed = -1;
 float outgoingSpeed = -1;
 
 void IRAM_ATTR gate1Interrupt() {
-    unsigned long currentTime = micros();
+                Serial.println("Gate1");
 
     if (gate1Triggered) {
-        gate1TriggerCount++;
         Serial.println("WARNING: Gate 1 triggered multiple times before Gate 2!");
         resetSavedSpeeds();
         return;  // Ignore repeated triggers
@@ -44,17 +48,15 @@ void IRAM_ATTR gate1Interrupt() {
 
     // First activation
     detachInterrupt(digitalPinToInterrupt(GATE1_PIN));  // Disable interrupt
-    timeGate1 = currentTime;
+    timeGate1 = micros();
     gate1Triggered = true;
     lastTriggeredGate = 1;
-    gate1TriggerCount++;
 }
 
 void IRAM_ATTR gate2Interrupt() {
-    unsigned long currentTime = micros();
+                Serial.println("Gate2");
 
     if (gate2Triggered) {
-        gate2TriggerCount++;
         Serial.println("WARNING: Gate 2 triggered multiple times before Gate 1!");
         resetSavedSpeeds();
         return;  // Ignore repeated triggers
@@ -62,10 +64,31 @@ void IRAM_ATTR gate2Interrupt() {
 
     // First activation
     detachInterrupt(digitalPinToInterrupt(GATE2_PIN));  // Disable interrupt
-    timeGate2 = currentTime;
+    timeGate2 = micros();
     gate2Triggered = true;
     lastTriggeredGate = 2;
-    gate2TriggerCount++;
+}
+
+void IRAM_ATTR gate3Interrupt() {
+
+   Serial.println("Gate3");
+
+    // First activation
+    //detachInterrupt(digitalPinToInterrupt(GATE3_PIN));  // Disable interrupt
+    gate3Triggered = true;
+
+     if (gate1Triggered && gate2Triggered) {
+        attachInterrupt(digitalPinToInterrupt(GATE1_PIN), gate1Interrupt, RISING);
+        attachInterrupt(digitalPinToInterrupt(GATE2_PIN), gate2Interrupt, RISING);
+        Serial.println("Gates reset");
+      }
+      else
+      {
+                Serial.println("Gate skipped");
+
+      }
+
+
 }
 
 
@@ -78,9 +101,6 @@ void resetMeasurement() {
     timeGate1 = 0;
     timeGate2 = 0;
     lastTriggeredGate = 0;
-    gate1TriggerCount = 0;
-    gate2TriggerCount = 0;
-
 
     // Re-enable interrupts
     attachInterrupt(digitalPinToInterrupt(GATE1_PIN), gate1Interrupt, RISING);
@@ -90,6 +110,7 @@ void resetMeasurement() {
 void resetSavedSpeeds(){
       incomingSpeed = -1;
       outgoingSpeed = -1;
+      printOutgoing = false;
 }
 
 void printSavedSpeeds(){
@@ -111,6 +132,8 @@ void setup() {
 
     attachInterrupt(digitalPinToInterrupt(GATE1_PIN), gate1Interrupt, RISING);
     attachInterrupt(digitalPinToInterrupt(GATE2_PIN), gate2Interrupt, RISING);
+    attachInterrupt(digitalPinToInterrupt(GATE3_PIN), gate3Interrupt, FALLING);
+
 
     Serial.println("Bidirectional Photogate Speed Measurement Ready...");
 
@@ -136,6 +159,7 @@ void loop() {
             Serial.println("Timeout occurred, resetting measurement...");
             resetSavedSpeeds();
             resetMeasurement();
+            return;
         }
     }
 
@@ -161,6 +185,11 @@ void loop() {
 
             resetMeasurement(); // Reset after successful measurement
         }
+    }
+    if(incomingSpeed != -1 && !printOutgoing){
+      printSavedSpeeds();
+      printOutgoing = true;
+
     }
     if(incomingSpeed != -1 && outgoingSpeed != 0){
       printSavedSpeeds();
